@@ -62,4 +62,13 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_4
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT true
 
+// External I2C servo controller (slave 0x24) on a dedicated I2C1 bus.
+// IO19/IO20 are this board's only free GPIO pair (native USB D+/D- pads):
+// once used, the native USB-C port (USB-OTG/JTAG) is unavailable and
+// flashing must go through the CH343 UART port. There are no on-board
+// pull-ups: the internal weak pull-up suits short low-speed wiring; add
+// external 2.2k~4.7k pull-ups to 3.3V for reliable 100kHz operation.
+#define I2C_SERVO_SDA_PIN GPIO_NUM_19
+#define I2C_SERVO_SCL_PIN GPIO_NUM_20
+
 #endif // _BOARD_CONFIG_H_

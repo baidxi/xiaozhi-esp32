@@ -1,21 +1,22 @@
-#include "wifi_board.h"
 #include "display/lcd_display.h"
 #include "esp_lcd_co5300.h"
+#include "wifi_board.h"
 
-#include "codecs/box_audio_codec.h"
 #include "application.h"
+#include "axp2101.h"
 #include "button.h"
+#include "codecs/box_audio_codec.h"
+#include "config.h"
+#include "i2c_device.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "config.h"
 #include "power_save_timer.h"
-#include "axp2101.h"
-#include "i2c_device.h"
+#include "servo/i2c_servo_controller.h"
 
-#include <esp_log.h>
-#include <esp_lcd_panel_vendor.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_master.h>
+#include <esp_lcd_panel_vendor.h>
+#include <esp_log.h>
 #include "esp_io_expander_tca9554.h"
 #include "settings.h"
 
@@ -28,8 +29,8 @@
 class Pmic : public Axp2101 {
 public:
     Pmic(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : Axp2101(i2c_bus, addr) {
-        WriteReg(0x22, 0b110); // PWRON > OFFLEVEL as POWEROFF Source enable
-        WriteReg(0x27, 0x10);  // hold 4s to power off
+        WriteReg(0x22, 0b110);  // PWRON > OFFLEVEL as POWEROFF Source enable
+        WriteReg(0x27, 0x10);   // hold 4s to power off
 
         // Disable All DCs but DC1
         WriteReg(0x80, 0x01);
@@ -46,11 +47,12 @@ public:
         // Enable ALDO1(MIC)
         WriteReg(0x90, 0x01);
 
-        WriteReg(0x64, 0x02); // CV charger voltage setting to 4.1V
+        WriteReg(0x64, 0x02);  // CV charger voltage setting to 4.1V
 
-        WriteReg(0x61, 0x02); // set Main battery precharge current to 50mA
-        WriteReg(0x62, 0x08); // set Main battery charger current to 400mA ( 0x08-200mA, 0x09-300mA, 0x0A-400mA )
-        WriteReg(0x63, 0x01); // set Main battery term charge current to 25mA
+        WriteReg(0x61, 0x02);  // set Main battery precharge current to 50mA
+        WriteReg(0x62, 0x08);  // set Main battery charger current to 400mA ( 0x08-200mA,
+                               // 0x09-300mA, 0x0A-400mA )
+        WriteReg(0x63, 0x01);  // set Main battery term charge current to 25mA
     }
 };
 
@@ -81,7 +83,7 @@ static const co5300_lcd_init_cmd_t vendor_specific_init[] = {
 class CustomLcdDisplay : public SpiLcdDisplay {
 public:
     static void rounder_event_cb(lv_event_t* e) {
-        lv_area_t* area = (lv_area_t* )lv_event_get_param(e);
+        lv_area_t* area = (lv_area_t*)lv_event_get_param(e);
         uint16_t x1 = area->x1;
         uint16_t x2 = area->x2;
 
@@ -96,17 +98,11 @@ public:
         area->y2 = ((y2 >> 1) << 1) + 1;
     }
 
-    CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle,
-                     esp_lcd_panel_handle_t panel_handle,
-                     int width,
-                     int height,
-                     int offset_x,
-                     int offset_y,
-                     bool mirror_x,
-                     bool mirror_y,
-                     bool swap_xy)
-        : SpiLcdDisplay(io_handle, panel_handle,
-                        width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy) {
+    CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle, esp_lcd_panel_handle_t panel_handle,
+                     int width, int height, int offset_x, int offset_y, bool mirror_x,
+                     bool mirror_y, bool swap_xy)
+        : SpiLcdDisplay(io_handle, panel_handle, width, height, offset_x, offset_y, mirror_x,
+                        mirror_y, swap_xy) {
         // Note: UI customization should be done in SetupUI(), not in constructor
         // to ensure lvgl objects are created before accessing them
     }
@@ -116,8 +112,8 @@ public:
         SpiLcdDisplay::SetupUI();
 
         DisplayLockGuard lock(this);
-        lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES*  0.1, 0);
-        lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES*  0.1, 0);
+        lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES * 0.1, 0);
+        lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES * 0.1, 0);
         lv_display_add_event_cb(display_, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
     }
 };
@@ -132,7 +128,7 @@ protected:
     virtual void SetBrightnessImpl(uint8_t brightness) override {
         auto display = Board::GetInstance().GetDisplay();
         DisplayLockGuard lock(display);
-        uint8_t data[1] = {((uint8_t)((255*  brightness) / 100))};
+        uint8_t data[1] = {((uint8_t)((255 * brightness) / 100))};
         int lcd_cmd = 0x51;
         lcd_cmd &= 0xff;
         lcd_cmd <<= 8;
@@ -155,12 +151,13 @@ private:
         power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
         power_save_timer_->OnEnterSleepMode([this]() {
             GetDisplay()->SetPowerSaveMode(true);
-            GetBacklight()->SetBrightness(20); });
+            GetBacklight()->SetBrightness(20);
+        });
         power_save_timer_->OnExitSleepMode([this]() {
             GetDisplay()->SetPowerSaveMode(false);
-            GetBacklight()->RestoreBrightness(); });
-        power_save_timer_->OnShutdownRequest([this](){ 
-            pmic_->PowerOff(); });
+            GetBacklight()->RestoreBrightness();
+        });
+        power_save_timer_->OnShutdownRequest([this]() { pmic_->PowerOff(); });
         power_save_timer_->SetEnabled(true);
     }
 
@@ -171,9 +168,10 @@ private:
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
             .scl_io_num = AUDIO_CODEC_I2C_SCL_PIN,
             .clk_source = I2C_CLK_SRC_DEFAULT,
-            .flags = {
-                .enable_internal_pullup = 1,
-            },
+            .flags =
+                {
+                    .enable_internal_pullup = 1,
+                },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
     }
@@ -198,7 +196,7 @@ private:
         buscfg.data1_io_num = EXAMPLE_PIN_NUM_LCD_DATA1;
         buscfg.data2_io_num = EXAMPLE_PIN_NUM_LCD_DATA2;
         buscfg.data3_io_num = EXAMPLE_PIN_NUM_LCD_DATA3;
-        buscfg.max_transfer_sz = DISPLAY_WIDTH*  DISPLAY_HEIGHT*  sizeof(uint16_t);
+        buscfg.max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
         buscfg.flags = SPICOMMON_BUSFLAG_QUAD;
         ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
@@ -253,7 +251,7 @@ private:
         panel_config.reset_gpio_num = EXAMPLE_PIN_NUM_LCD_RST;
         panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
         panel_config.bits_per_pixel = 16;
-        panel_config.vendor_config = (void* )&vendor_config;
+        panel_config.vendor_config = (void*)&vendor_config;
         ESP_ERROR_CHECK(esp_lcd_new_panel_co5300(panel_io, &panel_config, &panel));
         esp_lcd_panel_set_gap(panel, 0x06, 0);
         esp_lcd_panel_reset(panel);
@@ -261,8 +259,9 @@ private:
         esp_lcd_panel_invert_color(panel, false);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_disp_on_off(panel, true);
-        display_ = new CustomLcdDisplay(panel_io, panel,
-                                        DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        display_ = new CustomLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
         backlight_ = new CustomBacklight(panel_io);
         backlight_->RestoreBrightness();
     }
@@ -274,19 +273,21 @@ private:
             .y_max = DISPLAY_HEIGHT - 1,
             .rst_gpio_num = PIN_NUM_TOUCH_RST,
             .int_gpio_num = PIN_NUM_TOUCH_INT,
-            .levels = {
-                .reset = 0,
-                .interrupt = 0,
-            },
-            .flags = {
-                .swap_xy = 0,
-                .mirror_x = 1,
-                .mirror_y = 1,
-            },
+            .levels =
+                {
+                    .reset = 0,
+                    .interrupt = 0,
+                },
+            .flags =
+                {
+                    .swap_xy = 0,
+                    .mirror_x = 1,
+                    .mirror_y = 1,
+                },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
         esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_CST9217_CONFIG();
-        tp_io_config.scl_speed_hz = 400*  1000;
+        tp_io_config.scl_speed_hz = 400 * 1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_LOGI(TAG, "Initialize touch controller");
         ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_cst9217(tp_io_handle, &tp_cfg, &tp));
@@ -300,14 +301,47 @@ private:
 
     // 初始化工具
     void InitializeTools() {
-        auto &mcp_server = McpServer::GetInstance();
+        auto& mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",
-            "End this conversation and enter WiFi configuration mode.\n"
-            "**CAUTION** You must ask the user to confirm this action.",
-            PropertyList(), [this](const PropertyList& properties) {
-                EnterWifiConfigMode();
-                return true;
-            });
+                           "End this conversation and enter WiFi configuration mode.\n"
+                           "**CAUTION** You must ask the user to confirm this action.",
+                           PropertyList(), [this](const PropertyList& properties) {
+                               EnterWifiConfigMode();
+                               return true;
+                           });
+
+        // 外接I2C舵机从机(语音控制舵机), 配置取自本板 config.h 宏
+        I2cServoController::Config servo_cfg;
+        servo_cfg.slave_addr = I2C_SERVO_SLAVE_ADDR;
+        servo_cfg.scl_speed_hz = I2C_SERVO_CLK_HZ;
+        servo_cfg.ch_max = I2C_SERVO_CH_MAX;
+        servo_cfg.enable_gait = true;
+        servo_cfg.leg_ch[0] = QUAD_LEG_LF_CH;
+        servo_cfg.leg_ch[1] = QUAD_LEG_RF_CH;
+        servo_cfg.leg_ch[2] = QUAD_LEG_LB_CH;
+        servo_cfg.leg_ch[3] = QUAD_LEG_RB_CH;
+        servo_cfg.center_x10 = QUAD_CENTER_X10;
+        servo_cfg.swing_x10 = QUAD_SWING_X10;
+        servo_cfg.period_ms = QUAD_PERIOD_MS;
+        servo_cfg.tick_ms = QUAD_TICK_MS;
+#if I2C_SERVO_USE_MAIN_BUS
+        static I2cServoController servo_controller(i2c_bus_, servo_cfg);
+#else
+        static i2c_master_bus_handle_t servo_bus = nullptr;
+        i2c_master_bus_config_t servo_bus_cfg = {
+            .i2c_port = I2C_NUM_1,
+            .sda_io_num = I2C_SERVO_SDA_PIN,
+            .scl_io_num = I2C_SERVO_SCL_PIN,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .flags =
+                {
+                    .enable_internal_pullup = 1,
+                },
+        };
+        ESP_ERROR_CHECK(i2c_new_master_bus(&servo_bus_cfg, &servo_bus));
+        static I2cServoController servo_controller(servo_bus, servo_cfg);
+#endif
+        servo_controller.RegisterTools();
     }
 
 public:
@@ -327,35 +361,22 @@ public:
 
     virtual AudioCodec* GetAudioCodec() override {
         static BoxAudioCodec audio_codec(
-            i2c_bus_, 
-            AUDIO_INPUT_SAMPLE_RATE, 
-            AUDIO_OUTPUT_SAMPLE_RATE,
-            AUDIO_I2S_GPIO_MCLK, 
-            AUDIO_I2S_GPIO_BCLK, 
-            AUDIO_I2S_GPIO_WS, 
-            AUDIO_I2S_GPIO_DOUT, 
-            AUDIO_I2S_GPIO_DIN,
-            AUDIO_CODEC_PA_PIN, 
-            AUDIO_CODEC_ES8311_ADDR, 
-            AUDIO_CODEC_ES7210_ADDR, 
+            i2c_bus_, AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE, AUDIO_I2S_GPIO_MCLK,
+            AUDIO_I2S_GPIO_BCLK, AUDIO_I2S_GPIO_WS, AUDIO_I2S_GPIO_DOUT, AUDIO_I2S_GPIO_DIN,
+            AUDIO_CODEC_PA_PIN, AUDIO_CODEC_ES8311_ADDR, AUDIO_CODEC_ES7210_ADDR,
             AUDIO_INPUT_REFERENCE);
         return &audio_codec;
     }
 
-    virtual Display* GetDisplay() override {
-        return display_;
-    }
+    virtual Display* GetDisplay() override { return display_; }
 
-    virtual Backlight* GetBacklight() override {
-        return backlight_;
-    }
+    virtual Backlight* GetBacklight() override { return backlight_; }
 
-    virtual bool GetBatteryLevel(int &level, bool &charging, bool &discharging) override {
+    virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         static bool last_discharging = false;
         charging = pmic_->IsCharging();
         discharging = pmic_->IsDischarging();
-        if (discharging != last_discharging)
-        {
+        if (discharging != last_discharging) {
             power_save_timer_->SetEnabled(discharging);
             last_discharging = discharging;
         }
