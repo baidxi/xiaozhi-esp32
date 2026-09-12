@@ -1137,4 +1137,60 @@ menu "TAIJIPAI_S3_CONFIG"
         启动双声道
 endmenu
 
+    menu "MicroPython Runtime"
+        config XIAOZHI_MICROPYTHON
+            bool "Enable MicroPython runtime (graphical programming)"
+            default n
+            help
+                Embed the MicroPython interpreter as a background FreeRTOS task
+                so user scripts can be uploaded over the console serial port
+                (standard raw REPL protocol, compatible with Thonny/Mixly).
+                The runtime is board-independent; hardware access is provided
+                through Board interfaces. Disable this to remove all
+                MicroPython code and RAM usage.
+
+        if XIAOZHI_MICROPYTHON
+            config XIAOZHI_MICROPYTHON_TASK_STACK_SIZE
+                int "MicroPython task stack size (bytes)"
+                default 16384
+                help
+                    Stack for the MicroPython FreeRTOS task (REPL and
+                    scripts). 16KB matches the upstream MicroPython ESP32
+                    port default and leaves headroom for _thread.
+
+            config XIAOZHI_MICROPYTHON_HEAP_SIZE
+                int "MicroPython heap size (bytes)"
+                default 65536
+                help
+                    Size of the MicroPython GC heap. 64KB runs basic scripts;
+                    increase when scripts allocate large buffers. When the heap
+                    is in PSRAM the audio/wake-word memory usage must leave
+                    enough room.
+
+            choice XIAOZHI_MICROPYTHON_HEAP_LOCATION
+                prompt "MicroPython heap location"
+                default XIAOZHI_MICROPYTHON_HEAP_INTERNAL
+                help
+                    Internal RAM is faster and always available. PSRAM keeps
+                    internal RAM free for audio and wake-word buffers.
+
+                config XIAOZHI_MICROPYTHON_HEAP_INTERNAL
+                    bool "Internal RAM"
+
+                config XIAOZHI_MICROPYTHON_HEAP_SPIRAM
+                    bool "PSRAM"
+                    depends on SPIRAM
+            endchoice
+
+            config XIAOZHI_MICROPYTHON_AUTORUN_MAIN
+                bool "Auto-run main.py from the python partition at boot"
+                default y
+                help
+                    When a python (littlefs) partition exists and contains
+                    main.py, execute it after the assistant starts. Scripts can
+                    still be uploaded and run from the serial REPL regardless
+                    of this option.
+        endif
+    endmenu
+
 endmenu

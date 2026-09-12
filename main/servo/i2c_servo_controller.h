@@ -60,6 +60,12 @@ public:
     // the McpServer singleton.
     void RegisterTools();
 
+    // Bridge entry points (MicroPython xiaozhi.servo). Angles use the same
+    // 0.1-degree units as the self.servo.* MCP tools (90 deg -> 900).
+    bool SetAngleX10(int channel, int angle_x10);
+    bool SetEnable(int channel, bool enable);
+    bool CenterAll();
+
     // Gait modes for the quadruped engine (0 = stopped)
     enum Gait : int {
         GAIT_STOP = 0,

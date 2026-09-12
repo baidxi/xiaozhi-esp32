@@ -5,6 +5,11 @@ cmake_minimum_required(VERSION 3.16)
 # Add this line to disable the specific warning
 add_compile_options(-Wno-missing-field-initializers)
 
+# MicroPython runtime glue component. It is only compiled when the main
+# component links it (CONFIG_XIAOZHI_MICROPYTHON, MINIMAL_BUILD trims it
+# away otherwise).
+set(EXTRA_COMPONENT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/micropython_xz)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # "Trim" the build. Include the minimal set of components, main, and anything it depends on.
 idf_build_set_property(MINIMAL_BUILD ON)

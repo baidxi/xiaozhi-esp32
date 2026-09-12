@@ -20,6 +20,10 @@
 #include "esp_io_expander_tca9554.h"
 #include "settings.h"
 
+#if CONFIG_XIAOZHI_MICROPYTHON
+#include "xz_bridge.h"
+#endif
+
 #include <esp_lcd_touch_gt911.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
@@ -162,6 +166,14 @@ private:
                 },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
+
+#if CONFIG_XIAOZHI_MICROPYTHON
+        // Onboard QMI8658A six-axis IMU (0x6B) and PCF85063 RTC (0x51)
+        // share this bus. The drivers only add I2C devices; the ESP-IDF
+        // master driver serialises transactions with the codec/touch traffic.
+        xz_mpy_qmi8658_register(i2c_bus_, 0x6B);
+        xz_mpy_pcf85063_register(i2c_bus_, 0x51);
+#endif
     }
 
     void InitializeTca9554(void) {
@@ -345,6 +357,22 @@ private:
         servo_cfg.enable_gait = true;
         static I2cServoController servo_controller(servo_bus, servo_cfg);
         servo_controller.RegisterTools();
+
+#if CONFIG_XIAOZHI_MICROPYTHON
+        // Expose the same controller to Python as xiaozhi.servo(). The
+        // callback table wraps SetAngleX10 (Python passes degrees).
+        static xz_mpy_servo_api_t mpy_servo = {
+            .set_angle =
+                [](int ch, float deg) {
+                    return servo_controller.SetAngleX10(ch, (int)(deg * 10)) ? 0 : -1;
+                },
+            .set_enable = [](int ch,
+                             int en) { return servo_controller.SetEnable(ch, en != 0) ? 0 : -1; },
+            .center_all = []() { return servo_controller.CenterAll() ? 0 : -1; },
+            .channel_max = 11,
+        };
+        xz_mpy_servo_register(&mpy_servo);
+#endif
     }
     void CheckKeyState() {
         if (!io_expander)

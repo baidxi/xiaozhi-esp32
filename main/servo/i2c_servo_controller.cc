@@ -35,6 +35,23 @@ I2cServoController::~I2cServoController() {
     }
 }
 
+bool I2cServoController::SetAngleX10(int channel, int angle_x10) {
+    if (channel < 0 || channel > cfg_.ch_max || angle_x10 < 0 || angle_x10 > 1800) {
+        return false;
+    }
+    return WriteFrame(CMD_SET_ANGLE, static_cast<uint8_t>(channel),
+                      static_cast<uint16_t>(angle_x10));
+}
+
+bool I2cServoController::SetEnable(int channel, bool enable) {
+    if (channel < 0 || channel > cfg_.ch_max) {
+        return false;
+    }
+    return WriteFrame(CMD_SET_ENABLE, static_cast<uint8_t>(channel), enable ? 1 : 0);
+}
+
+bool I2cServoController::CenterAll() { return WriteFrame(CMD_CENTER_ALL, 0, 0); }
+
 bool I2cServoController::WriteFrame(uint8_t cmd, uint8_t ch, uint16_t val) {
     uint8_t frame[4] = {
         cmd,

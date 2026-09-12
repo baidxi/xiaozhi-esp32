@@ -64,6 +64,8 @@ list(APPEND SOURCES
     "boards/common/sleep_timer.cc"
     "boards/common/sy6970.cc"
     "boards/common/system_reset.cc"
+    "micropython_display.cc"
+    "micropython_logging.cc"
 )
 if(CONFIG_XIAOZHI_NETWORK_ETHERNET)
     list(APPEND SOURCES "boards/common/ethernet_board.cc")
@@ -1078,6 +1080,25 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         esp_driver_sdmmc
         sdmmc
     )
+endif()
+# MicroPython runtime glue (optional, "MicroPython Runtime" menu).
+#
+# NOTE on the sdkconfig fallback below: under MINIMAL_BUILD the component set
+# is trimmed from the dependency graph collected during the early component
+# expansion, and CONFIG_* variables are NOT injected into that expansion
+# pass (only build properties are). Reading the option straight from the
+# sdkconfig text keeps the graph correct in both phases; in the normal phase
+# the regular CONFIG_XIAOZHI_MICROPYTHON variable is already defined and the
+# fallback is skipped.
+if(NOT CONFIG_XIAOZHI_MICROPYTHON AND EXISTS ${CMAKE_CURRENT_LIST_DIR}/../sdkconfig)
+    file(STRINGS ${CMAKE_CURRENT_LIST_DIR}/../sdkconfig xz_mpy_enabled
+         REGEX "^CONFIG_XIAOZHI_MICROPYTHON=y$")
+    if(xz_mpy_enabled)
+        set(CONFIG_XIAOZHI_MICROPYTHON "y")
+    endif()
+endif()
+if(CONFIG_XIAOZHI_MICROPYTHON)
+    list(APPEND MAIN_PRIV_REQUIRES_EXTRA micropython_xz)
 endif()
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
